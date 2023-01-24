@@ -161,7 +161,7 @@ function unique({ newValue }, i, data) {
 }
 
 function typeTable(type) {
-  switch (type) {
+  switch (type.toLowerCase()) {
     case "situation":
       return "situation";
     case "objectif":
