@@ -17,7 +17,17 @@ function getTheme(theme) {
     Santé: "sante",
     "Contraintes familiales": "contraintes_familiales",
     "Maîtrise de la langue française": "maitrise_langue",
-  };
+    logement: "logement",
+    emploi: "emploi",
+    formation: "formation",
+    difficulte_administrative: "difficulte_administrative",
+    difficulte_financiere: "difficulte_financiere",
+    mobilite: "mobilite",
+    sante: "sante",
+    contraintes_familiales: "contraintes_familiales",
+    maitrise_langue: "maitrise_langue",
+  }
+;
   return themes[theme];
 }
 
@@ -48,7 +58,7 @@ function generateSql(data) {
     data.filter(({ action }) => action === "modifier")
   );
   const deleteMigrations = getDeleteUpdates(
-    data.filter(({ action }) => action === "fusionner")
+    data.filter(({ action }) => action === "fusionner" || action === "supprimer")
   );
 
   return []
