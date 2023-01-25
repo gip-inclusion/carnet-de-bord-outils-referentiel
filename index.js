@@ -1,10 +1,21 @@
 const { type } = require("os");
 const xlsxFile = require("read-excel-file/node");
 
-xlsxFile("./referentiel.xlsx")
-  .then(parseRow)
-  .then(generateSql)
-  .then(console.log);
+main();
+
+async function main() {
+  console.log("-- up.sql");
+  await xlsxFile("./referentiel.xlsx")
+    .then(parseRow)
+    .then(generateSqlForUp)
+    .then(console.log);
+
+  console.log("-- down.sql");
+  await xlsxFile("./referentiel.xlsx")
+    .then(parseRow)
+    .then(generateSqlForDown)
+    .then(console.log);
+}
 
 function getTheme(theme) {
   const themes = {
@@ -47,7 +58,7 @@ function toObjects(rowHeaders, data) {
   });
 }
 
-function generateSql(data) {
+function generateSqlForUp(data) {
   const updateJsonMigrations = getSqlJsonUpdates(
     data.filter(({ action }) => action === "modifier" || action === "fusionner")
   );
@@ -61,6 +72,41 @@ function generateSql(data) {
     data.filter(({ action }) => action === "fusionner" || action === "supprimer")
   );
 
+  return generateSql({ 
+    updateJsonMigrations, 
+    insertMigrations,
+    updateMigrations,
+    deleteMigrations,
+  });
+}
+
+function generateSqlForDown(data) {
+  const updateJsonMigrations = getSqlJsonUpdates(
+    data.filter(({ action }) => action === "modifier" || action === "fusionner"),
+    { forDownMigration: true },
+  );
+  const insertMigrations = getSqlInserts(
+    data.filter(({ action }) => action === "supprimer" || action == "fusionner"),
+    { forDownMigration: true },
+  );
+  const updateMigrations = getSqlUpdates(
+    data.filter(({ action }) => action === "modifier"),
+    { forDownMigration: true },
+  );
+  const deleteMigrations = getDeleteUpdates(
+    data.filter(({ action }) => action === "ajouter"),
+    { forDownMigration: true },
+  );
+
+  return generateSql({ 
+    updateJsonMigrations, 
+    insertMigrations,
+    updateMigrations,
+    deleteMigrations,
+  });
+}
+
+function generateSql({ updateJsonMigrations, insertMigrations, updateMigrations, deleteMigrations }) {
   return []
     .concat(
       ["", `--`, `-- update json migrations`, `--`],
@@ -75,80 +121,90 @@ function generateSql(data) {
     .join("\n");
 }
 
-function getSqlJsonUpdates(data) {
+function getSqlJsonUpdates(data, { forDownMigration } = { forDownMigration: false }) {
   const notebook_focus = data
     .filter(({ type }) => type === "situation")
     .map(
-      ({ oldValue, newValue }) =>
-        ` UPDATE notebook_focus set situations = situations - '${oldValue.replace(
+      ({ oldValue, newValue }) => {
+        const valueToReplace = forDownMigration ? newValue : oldValue;
+        const replacementValue = forDownMigration ? oldValue : newValue;
+        return `UPDATE public.notebook_focus set situations = situations - '${valueToReplace.replace(
           /'/g,
           "''"
-        )}' || '["${newValue.replace(
+        )}' || '["${replacementValue.replace(
           /'/g,
           "''"
-        )}"]'::jsonb  WHERE situations ? '${oldValue.replace(/'/g, "''")}';`
-    );
+        )}"]'::jsonb  WHERE situations ? '${valueToReplace.replace(/'/g, "''")}';`
+      });
 
   const notebook_target = data
     .filter(({ type }) => type === "objectif")
     .map(
-      ({ oldValue, newValue }) =>
-        `UPDATE public.notebook_target SET target='${newValue.replace(
+      ({ oldValue, newValue }) => {
+        const valueToReplace = forDownMigration ? newValue : oldValue;
+        const replacementValue = forDownMigration ? oldValue : newValue;
+        return `UPDATE public.notebook_target SET target='${replacementValue.replace(
           /'/g,
           "''"
-        )}' WHERE target= '${oldValue.replace(/'/g, "''")}';`
-    );
+        )}' WHERE target= '${valueToReplace.replace(/'/g, "''")}';`
+      });
   const notebook_action = data
     .filter(({ type }) => type === "action")
     .map(
-      ({ oldValue, newValue }) =>
-        `UPDATE public.notebook_action SET action='${newValue.replace(
+      ({ oldValue, newValue }) => {
+        const valueToReplace = forDownMigration ? newValue : oldValue;
+        const replacementValue = forDownMigration ? oldValue : newValue;
+        return `UPDATE public.notebook_action SET action='${replacementValue.replace(
           /'/g,
           "''"
-        )}' WHERE action= '${oldValue.replace(/'/g, "''")}';`
-    );
+        )}' WHERE action= '${valueToReplace.replace(/'/g, "''")}';`
+      });
 
   return notebook_focus.concat(notebook_target, notebook_action).join(`\n`);
 }
 
-function getSqlInserts(data) {
+function getSqlInserts(data, { forDownMigration } = { forDownMigration: false }) {
   return data
     .filter(unique)
     .map(
-      ({ theme, type, newValue }) =>
-        `INSERT INTO public.ref_${typeTable(
+      ({ theme, type, oldValue, newValue }) => {
+        const replacementValue = forDownMigration ? oldValue : newValue;
+        return `INSERT INTO public.ref_${typeTable(
           type
-        )} (description, theme) VALUES('${newValue.replace(
+        )} (description, theme) VALUES('${replacementValue.replace(
           /'/g,
           "''"
         )}', '${theme}');`
-    );
+      });
 }
 
-function getSqlUpdates(data) {
+function getSqlUpdates(data, { forDownMigration } = { forDownMigration: false }) {
   return data.map(
-    ({ theme, type, newValue, oldValue }) =>
-      `UPDATE public.ref_${typeTable(
+    ({ theme, type, newValue, oldValue }) => {
+      const valueToReplace = forDownMigration ? newValue : oldValue;
+      const replacementValue = forDownMigration ? oldValue : newValue;
+      return `UPDATE public.ref_${typeTable(
         type
-      )} SET description = '${newValue.replace(
+      )} SET description = '${replacementValue.replace(
         /'/g,
         "''"
-      )}' WHERE theme='${theme}' AND description='${oldValue.replace(
+      )}' WHERE theme='${theme}' AND description='${valueToReplace.replace(
         /'/g,
         "''"
       )}';`
-  );
+    });
 }
-function getDeleteUpdates(data) {
+function getDeleteUpdates(data, { forDownMigration } = { forDownMigration: false }) {
   return data.map(
-    ({ theme, type, oldValue }) =>
-      `DELETE FROM public.ref_${typeTable(
+    ({ theme, type, oldValue, newValue }) => {
+      const valueToReplace = forDownMigration ? newValue : oldValue;
+      return `DELETE FROM public.ref_${typeTable(
         type
-      )} WHERE theme='${theme}' AND description='${oldValue.replace(
+      )} WHERE theme='${theme}' AND description='${valueToReplace.replace(
         /'/g,
         "''"
       )}';`
-  );
+    });
 }
 function unique({ newValue }, i, data) {
   if (i === 0) return true;
