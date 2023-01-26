@@ -37,6 +37,8 @@ function getTheme(theme) {
     sante: "sante",
     contraintes_familiales: "contraintes_familiales",
     maitrise_langue: "maitrise_langue",
+    numerique: "numerique",
+    Numérique: "numerique",
   }
 ;
   return themes[theme];
